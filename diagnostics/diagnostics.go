@@ -42,8 +42,10 @@ type Diagnostics struct {
 	startTime  int64
 	start      time.Time
 
-	counts  map[string]int64
-	metrics map[string]string
+	counts      map[string]int64
+	metrics     map[string]string
+	countsChan  chan NamedInt64
+	metricsChan chan NamedString
 
 	client   *http.Client
 	interval time.Duration
@@ -51,19 +53,31 @@ type Diagnostics struct {
 	logOutput io.Writer
 }
 
+type NamedInt64 struct {
+	Name  string
+	Value int64
+}
+
+type NamedString struct {
+	Name  string
+	Value string
+}
+
 // New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
 func New(host string) *Diagnostics {
 	return &Diagnostics{
-		closing:    make(chan struct{}),
-		host:       host,
-		VersionURL: DefaultVersionCheckURL,
-		startTime:  time.Now().Unix(),
-		start:      time.Now(),
-		client:     http.DefaultClient,
-		counts:     make(map[string]int64),
-		metrics:    make(map[string]string),
-		interval:   DefaultDiagnosticsInterval,
-		logOutput:  ioutil.Discard,
+		closing:     make(chan struct{}),
+		host:        host,
+		VersionURL:  DefaultVersionCheckURL,
+		startTime:   time.Now().Unix(),
+		start:       time.Now(),
+		client:      http.DefaultClient,
+		counts:      make(map[string]int64),
+		metrics:     make(map[string]string),
+		countsChan:  make(chan NamedInt64),
+		metricsChan: make(chan NamedString),
+		interval:    DefaultDiagnosticsInterval,
+		logOutput:   ioutil.Discard,
 	}
 }
 
@@ -80,6 +94,10 @@ func (d *Diagnostics) schedule() {
 
 	for {
 		select {
+		case metric := <-d.metricsChan:
+			d.metrics[metric.Name] = metric.Value
+		case count := <-d.countsChan:
+			d.counts[count.Name] = count.Value
 		case <-d.closing:
 			return
 		case <-ticker.C:
@@ -91,12 +109,10 @@ func (d *Diagnostics) schedule() {
 
 // Flush sends the current metrics.
 func (d *Diagnostics) Flush() error {
-	d.mu.Lock()
-	d.metrics["uptime"] = strconv.FormatInt((time.Now().Unix() - d.startTime), 10)
+	d.metricsChan <- NamedString{Name: "uptime", Value: strconv.FormatInt((time.Now().Unix() - d.startTime), 10)}
 
 	buf, _ := d.MarshalJSON()
 	d.Reset()
-	d.mu.Unlock()
 
 	// d.logger().Println(string(buf))
 	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
@@ -227,16 +243,12 @@ func (d *Diagnostics) WithTags(tags ...string) pilosa.StatsClient {
 
 // Count tracks the number of times something occurs per diagnostic period.
 func (d *Diagnostics) Count(name string, value int64, rate float64) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.counts[name] += value
+	d.countsChan <- NamedInt64{Name: name, Value: value}
 }
 
 // CountWithCustomTags Tracks the number of times something occurs per diagnostic period.
 func (d *Diagnostics) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.counts[name] += value
+	d.countsChan <- NamedInt64{Name: name, Value: value}
 }
 
 // Gauge records the value of a metric.
@@ -250,9 +262,7 @@ func (d *Diagnostics) Histogram(name string, value float64, rate float64) {
 
 // Set adds a key value metric.
 func (d *Diagnostics) Set(name string, value string, rate float64) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.metrics[name] = value
+	d.metricsChan <- NamedString{Name: name, Value: value}
 }
 
 // Timing no-op.

@@ -22,6 +22,7 @@ func TestDiagnosticsClient(t *testing.T) {
 	// Create a new client.
 	d := diagnostics.New(server.URL)
 	d.SetLogger(ioutil.Discard)
+	d.Open()
 	defer d.Close()
 
 	dur, _ := time.ParseDuration("123us")
@@ -84,6 +85,7 @@ func TestDiagnosticsVersion_Parse(t *testing.T) {
 
 func TestDiagnosticsVersion_Compare(t *testing.T) {
 	d := diagnostics.New("localhost:10101")
+	d.Open()
 	defer d.Close()
 
 	version := "0.1.1"
@@ -119,6 +121,7 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 
 	// Create a new client.
 	d := diagnostics.New("localhost:10101")
+	d.Open()
 	defer d.Close()
 
 	version := "0.1.1"
@@ -151,6 +154,7 @@ func BenchmarkDiagnostics(b *testing.B) {
 	// Create a new client.
 	d := diagnostics.New(server.URL)
 	d.SetLogger(ioutil.Discard)
+	d.Open()
 	defer d.Close()
 
 	prev := runtime.GOMAXPROCS(4)
