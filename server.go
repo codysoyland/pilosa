@@ -31,6 +31,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/diagnostics"
@@ -130,6 +132,15 @@ func (s *Server) Open() error {
 		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
 	}
 
+	// GRPC connection setup
+	// TODO: Make port configurable, enable TLS
+	grpcLn, err := net.Listen(s.Network, "0.0.0.0:20101")
+	if err != nil {
+		return fmt.Errorf("net.Listen: %v", err)
+	}
+	grpcServer := grpc.NewServer()
+	internal.RegisterGeneralServer(grpcServer, NewGRPCGeneralServer(s))
+
 	s.ln = ln
 
 	if s.URI.Port() == 0 {
@@ -191,6 +202,14 @@ func (s *Server) Open() error {
 	// Serve HTTP.
 	go func() {
 		err := http.Serve(ln, s.Handler)
+		if err != nil {
+			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
+		}
+	}()
+
+	// Serve GRPC.
+	go func() {
+		err := grpcServer.Serve(grpcLn)
 		if err != nil {
 			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
@@ -639,4 +658,18 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
+}
+
+type GRPCGeneralServer struct {
+	server *Server
+}
+
+func NewGRPCGeneralServer(server *Server) *GRPCGeneralServer {
+	return &GRPCGeneralServer{server: server}
+}
+
+func (s *GRPCGeneralServer) GetMaxSlices(ctx context.Context, in *internal.Empty) (*internal.MaxSlicesResponse, error) {
+	return &internal.MaxSlicesResponse{
+		MaxSlices: s.server.Holder.MaxSlices(),
+	}, nil
 }

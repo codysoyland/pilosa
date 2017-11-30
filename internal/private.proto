@@ -38,8 +38,15 @@ message Cache {
 	repeated uint64 IDs = 1;
 }
 
+message Empty {
+}
+
 message MaxSlicesResponse {
     map<string, uint64> MaxSlices = 1;
+}
+
+service General {
+    rpc GetMaxSlices(Empty) returns (MaxSlicesResponse) {}
 }
 
 message CreateSliceMessage {
