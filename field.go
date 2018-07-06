@@ -1170,7 +1170,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 }
 
-func (o *FieldOptions) MarshalJSON() ([]byte, error) {
+func (o *FieldOptions) marshalJSON() ([]byte, error) {
 	switch o.Type {
 	case FieldTypeSet:
 		return json.Marshal(struct {
