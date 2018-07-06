@@ -29,7 +29,7 @@ const TimeFormat = "2006-01-02T15:04"
 type Parser struct {
 	r io.Reader
 	//scanner *bufScanner
-	PQL
+	pql
 }
 
 // NewParser returns a new instance of Parser.
@@ -51,11 +51,11 @@ func (p *Parser) Parse() (*Query, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "reading buffer to parse")
 	}
-	p.PQL = PQL{
+	p.pql = pql{
 		Buffer: string(buf),
 	}
 	p.Init()
-	err = p.PQL.Parse()
+	err = p.pql.Parse()
 	if err != nil {
 		return nil, errors.Wrap(err, "parsing")
 	}
