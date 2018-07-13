@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-peg test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-peg test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -63,22 +63,26 @@ endif
 release: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64 ENTERPRISE=1
-	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1
-	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1 ENTERPRISE=1
-	$(MAKE) release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1
-	$(MAKE) release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1 ENTERPRISE=1
+	$(MAKE) release-build GOOS=linux GOARCH=amd64
+	$(MAKE) release-build GOOS=linux GOARCH=amd64 ENTERPRISE=1
+	$(MAKE) release-build GOOS=linux GOARCH=386
+	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
 
-# Create branch-tagged pre-release for client library CI jobs
-prerelease-build: vendor
-	$(MAKE) release-build VERSION_ID=$(BRANCH_ID)
+# Create prerelease builds
+prerelease: vendor
+	$(MAKE) release-build GOOS=linux GOARCH=amd64 VERSION_ID=$$\(BRANCH_ID\)
+	$(MAKE) prerelease-upload GOOS=linux GOARCH=amd64 VERSION_ID=$$\(BRANCH_ID\)
+	$(eval tag := $(shell git describe --tags --exact-match HEAD))
+	$(if $(tag),$(MAKE) release)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=darwin GOARCH=amd64)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=darwin GOARCH=amd64 ENTERPRISE=1)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=linux GOARCH=amd64)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=linux GOARCH=amd64 ENTERPRISE=1)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=linux GOARCH=386)
+	$(if $(tag),$(MAKE) prerelease-upload GOOS=linux GOARCH=386 ENTERPRISE=1)
 
-# Create prerelease build for Linux/amd64
-prerelease:
-	$(MAKE) prerelease-build GOOS=linux GOARCH=amd64
-
-# Upload prerelease to S3
-prerelease-upload: prerelease
-	aws s3 cp build/pilosa-$(BRANCH_ID).tar.gz s3://build.pilosa.com/pilosa-$(BRANCH_ID).tar.gz --acl public-read
+prerelease-upload: build/pilosa-$(VERSION_ID).tar.gz
+	aws s3 cp build/pilosa-$(VERSION_ID).tar.gz s3://build.pilosa.com/pilosa-$(VERSION_ID).tar.gz --acl public-read
 
 # Install Pilosa
 install: vendor

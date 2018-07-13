@@ -15,16 +15,13 @@ install:
   - make install-dep vendor
 script:
   - make test
-before_deploy:
-  - pip install awscli --user `whoami`
-deploy:
-  - provider: script
-    script: make prerelease-upload GOOS=linux GOARCH=amd64
-    skip_cleanup: true
-    on:
-      all_branches: true
-      go: "1.10"
-      condition: $GOARCH = amd64
+jobs:
+    include:
+        - stage: deploy
+          script: pip install awscli --user `whoami` && make prerelease
+          go: "1.10"
+          env:
+              - GOARCH=amd64
 matrix:
   # Excluding or allowing failures on non-primary matrix configurations due to long running times.
   fast_finish: true
