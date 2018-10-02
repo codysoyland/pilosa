@@ -35,6 +35,9 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	opentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/opentracing/opentracing-go/log"
 	"github.com/pilosa/pilosa"
 
 	"github.com/pkg/errors"
@@ -419,6 +422,11 @@ type getStatusResponse struct {
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	fmt.Println("start span")
+	span, ctx := opentracing.StartSpanFromContext(ctx, "http_query")
+	defer span.Finish()
+
 	// Parse incoming request.
 	req, err := h.readQueryRequest(r)
 	if err != nil {
@@ -428,8 +436,15 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO: Remove
 	req.Index = mux.Vars(r)["index"]
+	span.LogFields(
+		log.String("query", req.Query),
+		log.String("index", req.Index),
+	)
 
-	resp, err := h.api.Query(r.Context(), req)
+	spanApiQuery, ctx := opentracing.StartSpanFromContext(ctx, "api_query")
+	resp, err := h.api.Query(ctx, req)
+	spanApiQuery.Finish()
+
 	if err != nil {
 		switch errors.Cause(resp.Err) {
 		case pilosa.ErrTooManyWrites:

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
@@ -98,14 +99,19 @@ func (api *API) validate(f apiMethod) error {
 
 // Query parses a PQL query out of the request and executes it.
 func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "query_validate")
 	if err := api.validate(apiQuery); err != nil {
+		span.Finish()
 		return QueryResponse{}, errors.Wrap(err, "validating api method")
 	}
+	span.Finish()
 
 	resp := QueryResponse{}
 
+	span, ctx = opentracing.StartSpanFromContext(ctx, "query_parse")
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
+		span.Finish()
 		return resp, errors.Wrap(err, "parsing")
 	}
 	execOpts := &execOptions{
@@ -114,7 +120,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
 		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
 	}
+	span, ctx = opentracing.StartSpanFromContext(ctx, "query_execute")
 	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
+	span.Finish()
 	if err != nil {
 		return resp, errors.Wrap(err, "executing")
 	}

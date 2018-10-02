@@ -33,6 +33,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/davecgh/go-spew/spew"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/encoding/proto"
@@ -42,6 +44,8 @@ import (
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
+
+	jaegercfg "github.com/uber/jaeger-client-go/config"
 )
 
 type loggerLogger interface {
@@ -118,12 +122,53 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 	return c
 }
 
+func (m *Command) SetupTracing() (io.Closer, error) {
+	log.Println("Setup tracing")
+	cfg, err := jaegercfg.FromEnv()
+	spew.Dump(cfg)
+
+	if err != nil {
+		panic(err) // TODO: not panic
+	}
+
+	tracer, closer, err := cfg.NewTracer()
+
+	opentracing.SetGlobalTracer(tracer)
+
+	//	cfg := jaegercfg.Configuration{
+	//		Reporter: &jaegercfg.ReporterConfig{
+	//			LogSpans: true,
+	//		},
+	//	}
+	//
+	//	jLogger := jaegerlog.StdLogger
+	//	jMetricsFactory := metrics.NullFactory
+	//
+	//	closer, err := cfg.InitGlobalTracer(
+	//		"pilosa",
+	//		jaegercfg.Logger(jLogger),
+	//		jaegercfg.Metrics(jMetricsFactory),
+	//	)
+	if err != nil {
+		return nil, errors.Wrap(err, "initialize jaeger tracer")
+	}
+	return closer, nil
+}
+
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	defer close(m.Started)
 
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
+
+	// Initialize tracing
+	closer, err := m.SetupTracing()
+	_ = closer
+	//defer closer.Close()
+	if err != nil {
+		return errors.Wrap(err, "setup tracing")
+	}
 
 	// SetupServer
 	err = m.SetupServer()
