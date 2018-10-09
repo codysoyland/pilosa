@@ -36,7 +36,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
-
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -221,6 +221,15 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
+func (h *Handler) extractTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span, ctx := tracing.GlobalTracer.ExtractHTTPHeaders(r)
+		defer span.Finish()
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
@@ -267,6 +276,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
 	router.Use(handler.queryArgValidator)
+	router.Use(handler.extractTracing)
 	return router
 }
 

@@ -17,11 +17,13 @@ package cmd
 import (
 	"io"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/pilosa/pilosa/ctl"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/tracing/opentracing"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
 )
 
 // Server is global so that tests can control and verify it.
@@ -39,6 +41,21 @@ It will load existing data from the configured
 directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Initialize tracing in the command since it is global.
+			var cfg jaegercfg.Configuration
+			cfg.ServiceName = "pilosa"
+			cfg.Sampler = &jaegercfg.SamplerConfig{
+				Type:  Server.Config.Tracing.SamplerType,
+				Param: Server.Config.Tracing.SamplerParam,
+			}
+			tracer, closer, err := cfg.NewTracer()
+			if err != nil {
+				return errors.Wrap(err, "initializing jaeger tracer")
+			}
+			defer closer.Close()
+			tracing.GlobalTracer = opentracing.NewTracer(tracer)
+
+			// Start & run the server.
 			if err := Server.Start(); err != nil {
 				return errors.Wrap(err, "running server")
 			}
