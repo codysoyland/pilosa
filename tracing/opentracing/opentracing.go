@@ -46,7 +46,7 @@ func (t *Tracer) InjectHTTPHeaders(r *http.Request) {
 // ExtractHTTPHeaders reads the HTTP headers to derive incoming context.
 func (t *Tracer) ExtractHTTPHeaders(r *http.Request) (tracing.Span, context.Context) {
 	// Deserialize tracing context into request.
-	wireContext, _ := opentracing.GlobalTracer().Extract(
+	wireContext, _ := t.tracer.Extract(
 		opentracing.HTTPHeaders,
 		opentracing.HTTPHeadersCarrier(r.Header),
 	)
